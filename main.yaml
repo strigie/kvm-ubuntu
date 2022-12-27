@@ -31,6 +31,39 @@
       loop: "{{ groups['vms'] }}"
       become: yes
 
+    - name: check if ubuntu network already exists
+      virt_net:
+        command: list_nets
+      register: all_nets
+
+    - name: destroy old ubuntu
+      virt_net:
+        command: destroy
+        name: ubuntu
+      when: "'ubuntu' in all_nets.list_nets"
+      become: yes
+
+    - name: undefine old ubuntu network
+      virt_net:
+        command: undefine
+        name: ubuntu
+      when: "'ubuntu' in all_nets.list_nets"
+      become: yes
+
+    - name: define ubuntu network
+      virt_net:
+        command: define
+        name: ubuntu
+        xml: "{{ lookup('template', 'net.xml.j2')}}"
+      become: yes
+
+    - name: start ubuntu
+      virt_net:
+        command: create
+        name: ubuntu
+        state: active
+      become: yes
+
     - name: Create images
       copy:
         src: "/tmp/{{ image | basename }}"
@@ -47,7 +80,7 @@
 
     - name: Modify network
       virt_net:
-        name: default
+        name: ubuntu
         command: modify
         xml: "<host mac='{{ hostvars[item].mac}}' name='{{ item }}' ip='{{ hostvars[item].ip }}'/>"
       loop: "{{ groups['vms'] }}"
@@ -62,7 +95,7 @@
           --arch x86_64
           --os-variant ubuntu20.04
           --cloud-init=meta-data=/tmp/{{ item }}-meta-data.yaml,user-data=/tmp/{{ item }}-user-data.yaml
-          --network=default,mac="{{ hostvars[item].mac }}"
+          --network=network=ubuntu,mac="{{ hostvars[item].mac }}"
           --vcpus {{ cpu }}
           --ram {{ ram }}
           --disk /var/lib/libvirt/images/{{ item }}.qcow2,device=disk,bus=virtio,cache=unsafe
