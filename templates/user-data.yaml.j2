@@ -1,0 +1,7 @@
+#cloud-config
+users:
+  - name: dhaupt
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - {{ lookup('file', '/home/dhaupt/.ssh/id_ed25519.pub') }}

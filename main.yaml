@@ -1,0 +1,74 @@
+---
+- hosts: kvm_host
+  tasks:
+    - name: Get image
+      get_url:
+        url: "{{ image }}"
+        dest: "/tmp/{{ image | basename }}"
+
+    - name: Template meta-data
+      template:
+        src: meta-data.yaml.j2
+        dest: "/tmp/{{ item }}-meta-data.yaml"
+      loop: "{{ groups['vms'] }}"
+
+    - name: Template user-data
+      template:
+        src: user-data.yaml.j2
+        dest: "/tmp/{{ item }}-user-data.yaml"
+      loop: "{{ groups['vms'] }}"
+
+    - name: check if VM already exists
+      virt:
+        command: list_vms
+      register: all_vms
+
+    - name: Destroy old VM
+      shell: |
+        virsh destroy {{ item }}
+        virsh undefine --remove-all-storage {{ item }}
+      when: "item in all_vms.list_vms"
+      loop: "{{ groups['vms'] }}"
+      become: yes
+
+    - name: Create images
+      copy:
+        src: "/tmp/{{ image | basename }}"
+        dest: "/var/lib/libvirt/images//{{ item }}.qcow2"
+        remote_src: yes
+      loop: "{{ groups['vms'] }}"
+      become: yes
+
+    - name: Resize filesystem
+      shell:
+        qemu-img resize /var/lib/libvirt/images/"{{ item }}".qcow2 "{{ hostvars[item].disk }}"
+      loop: "{{ groups['vms'] }}"
+      become: yes
+
+    - name: Modify network
+      virt_net:
+        name: default
+        command: modify
+        xml: "<host mac='{{ hostvars[item].mac}}' name='{{ item }}' ip='{{ hostvars[item].ip }}'/>"
+      loop: "{{ groups['vms'] }}"
+      become: yes
+
+    - name: Install VM
+      shell: >-
+          virt-install
+          --name {{ item }}
+          --hvm
+          --virt-type kvm
+          --arch x86_64
+          --os-variant ubuntu20.04
+          --cloud-init=meta-data=/tmp/{{ item }}-meta-data.yaml,user-data=/tmp/{{ item }}-user-data.yaml
+          --network=default,mac="{{ hostvars[item].mac }}"
+          --vcpus {{ cpu }}
+          --ram {{ ram }}
+          --disk /var/lib/libvirt/images/{{ item }}.qcow2,device=disk,bus=virtio,cache=unsafe
+          --check disk_size=off
+          --nographics
+          --noautoconsole
+          --boot menu=on,useserial=on
+      loop: "{{ groups['vms'] }}"
+      become: yes

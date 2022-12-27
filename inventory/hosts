@@ -1,0 +1,5 @@
+[kvm_host]
+localhost ansible_connection=local
+[vms]
+cp mac=de:ad:be:ef:00:01 ip=192.168.124.10 disk=10G
+worker mac=de:ad:be:ef:00:02 ip=192.168.124.11 disk=10G
